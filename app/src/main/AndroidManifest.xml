@@ -27,6 +27,7 @@
     <uses-feature android:name="android.hardware.location.gps" android:required="true" />
 
     <application
+        android:name=".VajraApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Vajra"
@@ -43,6 +44,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Google Maps API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
 
         <service
             android:name=".core.service.MeshBackgroundService"
