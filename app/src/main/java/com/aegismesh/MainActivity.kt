@@ -1,10 +1,10 @@
 package com.aegismesh
 
-import android.annotation.SuppressLint
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -18,6 +18,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.aegismesh.ui.dashboard.MainDashboard
 import com.aegismesh.ui.dashboard.MainViewModel
+import com.google.android.gms.location.LocationServices
 
 class MainActivity : ComponentActivity() {
 
@@ -33,11 +34,12 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels {
         val app = application as VajraApplication
+        val locationClient = LocationServices.getFusedLocationProviderClient(this)
         object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
                     @Suppress("UNCHECKED_CAST")
-                    return MainViewModel(app.meshManager, app.compressor) as T
+                    return MainViewModel(app.meshManager, app.compressor, locationClient) as T
                 }
                 throw IllegalArgumentException("Unknown ViewModel")
             }
@@ -52,6 +54,7 @@ class MainActivity : ComponentActivity() {
                 val radioState by viewModel.radioState.collectAsState()
                 val intercepts by viewModel.intercepts.collectAsState()
                 val selectedPacket by viewModel.selectedPacket.collectAsState()
+                val userLocation by viewModel.userLocation.collectAsState()
                 val beepEnabled by viewModel.beepEnabled.collectAsState()
                 val availableIntents = viewModel.availableIntents
 
@@ -60,6 +63,7 @@ class MainActivity : ComponentActivity() {
                     incomingPackets = intercepts,
                     availableIntents = availableIntents,
                     selectedPacket = selectedPacket,
+                    userLocation = userLocation,
                     beepEnabled = beepEnabled,
                     onBeepToggle = { viewModel.toggleBeep(it) },
                     onPacketSelected = { viewModel.selectPacket(it) },
@@ -112,15 +116,21 @@ class MainActivity : ComponentActivity() {
         requestPermissionLauncher.launch(requiredPermissions.toTypedArray())
     }
 
-    @SuppressLint("MissingPermission")
     private fun checkBluetoothState() {
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         val bluetoothAdapter = bluetoothManager.adapter
         if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled) {
-            try {
-                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                startActivity(enableBtIntent)
-            } catch (_: SecurityException) {
+            val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+            if (hasPermission) {
+                try {
+                    val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                    startActivity(enableBtIntent)
+                } catch (_: SecurityException) {
+                }
             }
         }
     }
