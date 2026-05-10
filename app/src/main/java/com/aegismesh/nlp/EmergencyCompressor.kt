@@ -36,7 +36,7 @@ class EmergencyCompressor(private val context: Context) {
     }
 
     fun getAvailableIntents(): List<String> {
-        return intentMap.values.toList().sorted()
+        return intentMap.values.asSequence().sorted().toList()
     }
 
     // string to byte

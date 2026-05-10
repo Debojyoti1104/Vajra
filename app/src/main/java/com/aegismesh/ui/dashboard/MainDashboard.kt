@@ -23,8 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import com.aegismesh.R
 import com.aegismesh.core.models.MeshPacket
 import com.aegismesh.core.service.RadioState
 import com.aegismesh.ui.components.MeshGuardian
@@ -39,17 +37,17 @@ fun MainDashboard(
     beepEnabled: Boolean,
     onBeepToggle: (Boolean) -> Unit,
     onPacketSelected: (MeshPacket?) -> Unit,
-    onHoldSos: (android.content.Context, String) -> Unit
+    onHoldSos: (android.content.Context, String) -> Unit,
 ) {
     val context = LocalContext.current
     var selectedIntent by remember { mutableStateOf("I'm trapped and bleeding") }
-    var showDropdown by remember { mutableStateOf(false) }
+    var showDropdown by remember { mutableStateOf(value = false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .padding(16.dp)
+            .padding(16.dp),
     ) {
         // Map overlay when tracking
         if (selectedPacket != null) {
@@ -143,7 +141,7 @@ fun MainDashboard(
         Spacer(modifier = Modifier.height(16.dp))
 
         // SOS Button
-        SosButton(onHoldSos = { onHoldSos(context, selectedIntent) })
+        SosButton { onHoldSos(context, selectedIntent) }
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -165,9 +163,8 @@ fun MainDashboard(
                 InterceptCard(
                     packet = packet, 
                     intentText = text,
-                    userLocation = userLocation,
-                    onClick = { onPacketSelected(packet) }
-                )
+                    userLocation = userLocation
+                ) { onPacketSelected(packet) }
             }
         }
     }
@@ -212,7 +209,7 @@ fun PulseAnimation(isActive: Boolean) {
 
 @Composable
 fun SosButton(onHoldSos: () -> Unit) {
-    var isHolding by remember { mutableStateOf(false) }
+    var isHolding by remember { mutableStateOf(value = false) }
 
     Box(
         modifier = Modifier
@@ -229,7 +226,7 @@ fun SosButton(onHoldSos: () -> Unit) {
                     detectTapGestures(
                         onPress = {
                             isHolding = true
-                            val success = tryAwaitRelease()
+                            tryAwaitRelease()
                             isHolding = false
                         },
                         onLongPress = {

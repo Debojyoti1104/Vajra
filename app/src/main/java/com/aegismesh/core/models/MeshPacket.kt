@@ -10,7 +10,7 @@ data class MeshPacket(
     val compressedLat: Int,
     val compressedLon: Int,
     val intentCode: Byte,
-    val signature: ByteArray = ByteArray(4) { 0 }
+    val signature: ByteArray = ByteArray(4),
 ) {
     val latitude: Double get() = compressedLat / 10_000_000.0
     val longitude: Double get() = compressedLon / 10_000_000.0

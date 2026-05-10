@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AegisMesh"
+rootProject.name = "vajra"
 include(":app")

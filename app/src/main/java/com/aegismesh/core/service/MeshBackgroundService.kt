@@ -86,7 +86,7 @@ class MeshBackgroundService : Service() {
     private fun createNotificationChannels() {
         val serviceChannel = NotificationChannel(
             CHANNEL_ID, "Mesh Network Service",
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_LOW,
         )
         
         val emergencyChannel = NotificationChannel(

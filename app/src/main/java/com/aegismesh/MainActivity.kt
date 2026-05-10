@@ -23,7 +23,7 @@ import com.google.android.gms.location.LocationServices
 class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
+        ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
         if (allGranted) {
@@ -67,10 +67,9 @@ class MainActivity : ComponentActivity() {
                     beepEnabled = beepEnabled,
                     onBeepToggle = { viewModel.toggleBeep(it) },
                     onPacketSelected = { viewModel.selectPacket(it) },
-                    onHoldSos = { ctx, intent ->
-                        viewModel.triggerSos(ctx, intent)
-                    }
-                )
+                ) { ctx, intent ->
+                    viewModel.triggerSos(ctx, intent)
+                }
             }
         }
 
@@ -100,7 +99,7 @@ class MainActivity : ComponentActivity() {
 
         val requiredPermissions = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -119,7 +118,7 @@ class MainActivity : ComponentActivity() {
     private fun checkBluetoothState() {
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         val bluetoothAdapter = bluetoothManager.adapter
-        if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled) {
+        if ((bluetoothAdapter != null) && (!bluetoothAdapter.isEnabled)) {
             val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
             } else {

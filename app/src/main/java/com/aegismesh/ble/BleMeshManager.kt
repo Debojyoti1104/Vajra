@@ -20,12 +20,12 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 @SuppressLint("MissingPermission")
-class BleMeshManager(private val context: Context) : MeshService {
+class BleMeshManager(context: Context) : MeshService {
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
-    private val advertiser: BluetoothLeAdvertiser? = bluetoothAdapter?.bluetoothLeAdvertiser
-    private val scanner: BluetoothLeScanner? = bluetoothAdapter?.bluetoothLeScanner
+    private val bluetoothAdapter: BluetoothAdapter? get() = bluetoothManager.adapter
+    private val advertiser: BluetoothLeAdvertiser? get() = bluetoothAdapter?.bluetoothLeAdvertiser
+    private val scanner: BluetoothLeScanner? get() = bluetoothAdapter?.bluetoothLeScanner
 
     private val _incomingPackets = MutableSharedFlow<MeshPacket>(replay = 5)
     override val incomingPackets: SharedFlow<MeshPacket> = _incomingPackets.asSharedFlow()
@@ -39,16 +39,18 @@ class BleMeshManager(private val context: Context) : MeshService {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // custom UUID for the mesh
-    private val MESH_SERVICE_UUID = ParcelUuid(UUID.fromString("0000AEB1-0000-1000-8000-00805f9b34fb"))
+    private val meshServiceUuid = ParcelUuid(UUID.fromString("0000AEB1-0000-1000-8000-00805f9b34fb"))
 
     override fun startMeshEngine() {
-        Log.d("BleMeshManager", "Starting Mesh Engine")
-        if (bluetoothAdapter == null) {
+        Log.d("BleMeshManager", "Attempting to start Mesh Engine")
+        val adapter = bluetoothAdapter
+        
+        if (adapter == null) {
             Log.e("BleMeshManager", "Bluetooth Adapter is NULL")
             _radioState.value = RadioState.ERROR
             return
         }
-        if (!bluetoothAdapter.isEnabled) {
+        if (!adapter.isEnabled) {
             Log.e("BleMeshManager", "Bluetooth is DISABLED")
             _radioState.value = RadioState.ERROR
             return
@@ -58,13 +60,8 @@ class BleMeshManager(private val context: Context) : MeshService {
             _radioState.value = RadioState.ERROR
             return
         }
-        if (advertiser == null) {
-            Log.e("BleMeshManager", "Advertiser is NULL")
-            _radioState.value = RadioState.ERROR
-            return
-        }
         
-        Log.d("BleMeshManager", "All checks passed, starting scan")
+        Log.d("BleMeshManager", "Checks passed, starting scan")
         startScanning(ScanSettings.SCAN_MODE_BALANCED)
         cleanUpStaleIds()
     }
@@ -78,14 +75,20 @@ class BleMeshManager(private val context: Context) : MeshService {
 
     override suspend fun sendSOS(intentCode: Byte, lat: Double, lon: Double) {
         val newId = (Math.random() * Int.MAX_VALUE).toInt()
+        
+        // Use 10M for 7-decimal precision (~1cm)
+        val compLat = (lat * 10_000_000).toInt()
+        val compLon = (lon * 10_000_000).toInt()
+
         val packet = MeshPacket(
             messageId = newId,
             hopCount = MeshPacket.DEFAULT_TTL,
-            compressedLat = (lat * 10_000_000).toInt(),
-            compressedLon = (lon * 10_000_000).toInt(),
-            intentCode = intentCode
+            compressedLat = compLat,
+            compressedLon = compLon,
+            intentCode = intentCode,
         )
-
+        
+        Log.d("BleMeshManager", "Sending SOS: lat=$lat ($compLat), lon=$lon ($compLon)")
         seenMessageIds[newId] = System.currentTimeMillis()
         broadcastPacket(packet, durationMs = 10_000L)
     }
@@ -96,7 +99,7 @@ class BleMeshManager(private val context: Context) : MeshService {
             .build()
 
         val filter = ScanFilter.Builder()
-            .setServiceUuid(MESH_SERVICE_UUID)
+            .setServiceUuid(meshServiceUuid)
             .build()
 
         _radioState.value = if (mode == ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -104,8 +107,8 @@ class BleMeshManager(private val context: Context) : MeshService {
 
         try {
             scanner?.startScan(listOf(filter), settings, scanCallback)
-        } catch (e: Exception) {
-            Log.e("BleMeshManager", "Failed to start scanning", e)
+        } catch (_: Exception) {
+            Log.e("BleMeshManager", "Failed to start scanning")
             _radioState.value = RadioState.ERROR
         }
     }
@@ -113,14 +116,14 @@ class BleMeshManager(private val context: Context) : MeshService {
     private fun stopScanning() {
         try {
             scanner?.stopScan(scanCallback)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Ignore
         }
     }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            result?.scanRecord?.serviceData?.get(MESH_SERVICE_UUID)?.let { bytes ->
+            result?.scanRecord?.serviceData?.get(meshServiceUuid)?.let { bytes ->
                 MeshPacket.fromByteArray(bytes)?.let { packet ->
                     handleIncomingPacket(packet)
                 }
@@ -156,6 +159,12 @@ class BleMeshManager(private val context: Context) : MeshService {
     }
 
     private fun broadcastPacket(packet: MeshPacket, durationMs: Long) {
+        val adv = advertiser
+        if (adv == null) {
+            Log.e("BleMeshManager", "Cannot broadcast: Advertiser is NULL")
+            return
+        }
+
         val advertiseSettings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
@@ -163,8 +172,8 @@ class BleMeshManager(private val context: Context) : MeshService {
             .build()
 
         val advertiseData = AdvertiseData.Builder()
-            .addServiceUuid(MESH_SERVICE_UUID)
-            .addServiceData(MESH_SERVICE_UUID, packet.toByteArray())
+            .addServiceUuid(meshServiceUuid)
+            .addServiceData(meshServiceUuid, packet.toByteArray())
             .build()
 
         val callback = object : AdvertiseCallback() {
@@ -177,17 +186,17 @@ class BleMeshManager(private val context: Context) : MeshService {
         }
 
         try {
-            advertiser?.startAdvertising(advertiseSettings, advertiseData, callback)
+            adv.startAdvertising(advertiseSettings, advertiseData, callback)
 
             scope.launch {
                 delay(durationMs)
-                advertiser?.stopAdvertising(callback)
+                adv.stopAdvertising(callback)
                 if (_radioState.value == RadioState.RELAYING) {
                     _radioState.value = RadioState.SCANNING_BALANCED
                 }
             }
-        } catch (e: Exception) {
-            Log.e("BleMeshManager", "Failed to start advertising", e)
+        } catch (_: Exception) {
+            Log.e("BleMeshManager", "Failed to start advertising")
         }
     }
 
