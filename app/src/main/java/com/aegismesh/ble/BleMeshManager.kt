@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-@SuppressLint("MissingPermission") // Permissions handled at UI level
+@SuppressLint("MissingPermission")
 class BleMeshManager(private val context: Context) : MeshService {
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -27,21 +27,18 @@ class BleMeshManager(private val context: Context) : MeshService {
     private val advertiser: BluetoothLeAdvertiser? = bluetoothAdapter?.bluetoothLeAdvertiser
     private val scanner: BluetoothLeScanner? = bluetoothAdapter?.bluetoothLeScanner
 
-    // Expose flows to the UI layer
     private val _incomingPackets = MutableSharedFlow<MeshPacket>(replay = 5)
     override val incomingPackets: SharedFlow<MeshPacket> = _incomingPackets.asSharedFlow()
 
     private val _radioState = MutableStateFlow(RadioState.IDLE)
     override val radioState: SharedFlow<RadioState> = _radioState.asStateFlow()
 
-    // Deduplication Set: Store seen MessageIDs with a timestamp
-    // Using ConcurrentHashMap to allow safe removal of stale IDs
+    // track seen IDs to avoid loops
     private val seenMessageIds = ConcurrentHashMap<Int, Long>()
 
-    // Coroutine scope for managing relay timings
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // Standard UUID for Aegis Mesh Broadcasts
+    // custom UUID for the mesh
     private val MESH_SERVICE_UUID = ParcelUuid(UUID.fromString("0000AEB1-0000-1000-8000-00805f9b34fb"))
 
     override fun startMeshEngine() {
@@ -80,7 +77,6 @@ class BleMeshManager(private val context: Context) : MeshService {
     }
 
     override suspend fun sendSOS(intentCode: Byte, lat: Double, lon: Double) {
-        // Generate a random 32-bit integer for the MessageID
         val newId = (Math.random() * Int.MAX_VALUE).toInt()
         val packet = MeshPacket(
             messageId = newId,
@@ -90,10 +86,8 @@ class BleMeshManager(private val context: Context) : MeshService {
             intentCode = intentCode
         )
 
-        // Prevent self-relaying
         seenMessageIds[newId] = System.currentTimeMillis()
-
-        broadcastPacket(packet, durationMs = 10_000L) // Broadcast own SOS longer
+        broadcastPacket(packet, durationMs = 10_000L)
     }
 
     private fun startScanning(mode: Int) {
@@ -134,7 +128,7 @@ class BleMeshManager(private val context: Context) : MeshService {
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.e("BleMeshManager", "Scan failed with error code: $errorCode")
+            Log.e("BleMeshManager", "Scan failed: $errorCode")
             _radioState.value = RadioState.ERROR
         }
     }
@@ -142,7 +136,6 @@ class BleMeshManager(private val context: Context) : MeshService {
     private fun handleIncomingPacket(packet: MeshPacket) {
         val currentTime = System.currentTimeMillis()
 
-        // Deduplication Logic
         if (seenMessageIds.containsKey(packet.messageId)) return
         seenMessageIds[packet.messageId] = currentTime
 
@@ -150,15 +143,15 @@ class BleMeshManager(private val context: Context) : MeshService {
             _incomingPackets.emit(packet)
         }
 
-        // Tier 0 (Critical) Alert heuristic: e.g., intent codes 0x01 to 0x05 are critical
+        // if intent is critical, boost scan speed
         if (packet.intentCode in 1..5) {
             boostScannerLatency()
         }
 
-        // Routing / Re-broadcasting Logic
+        // relay logic
         if (packet.hopCount > 0) {
             packet.hopCount--
-            broadcastPacket(packet, durationMs = 5000L) // Propagate for 5 seconds
+            broadcastPacket(packet, durationMs = 5000L)
         }
     }
 
@@ -186,7 +179,6 @@ class BleMeshManager(private val context: Context) : MeshService {
         try {
             advertiser?.startAdvertising(advertiseSettings, advertiseData, callback)
 
-            // Stop advertising after the specified duration
             scope.launch {
                 delay(durationMs)
                 advertiser?.stopAdvertising(callback)
@@ -202,12 +194,11 @@ class BleMeshManager(private val context: Context) : MeshService {
     private fun boostScannerLatency() {
         if (_radioState.value == RadioState.SCANNING_LOW_LATENCY) return
 
-        // Temporarily boost scanner to catch rapid mesh bursts
         stopScanning()
         startScanning(ScanSettings.SCAN_MODE_LOW_LATENCY)
 
         scope.launch {
-            delay(15_000L) // Keep boosted for 15s
+            delay(15_000L)
             if (_radioState.value == RadioState.SCANNING_LOW_LATENCY) {
                 stopScanning()
                 startScanning(ScanSettings.SCAN_MODE_BALANCED)
@@ -216,16 +207,14 @@ class BleMeshManager(private val context: Context) : MeshService {
     }
 
     private fun stopAdvertising() {
-        // Implementation would track active callbacks and stop them
-        // For simplicity in this blueprint, it is handled within broadcastPacket's delay scope
+        // TODO: track and stop active callbacks if needed
     }
 
     private fun cleanUpStaleIds() {
         scope.launch {
             while (isActive) {
-                delay(60_000L) // Run every minute
+                delay(60_000L)
                 val now = System.currentTimeMillis()
-                // Remove IDs older than 5 minutes
                 seenMessageIds.entries.removeIf { now - it.value > 300_000L }
             }
         }

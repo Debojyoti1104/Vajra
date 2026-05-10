@@ -11,9 +11,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aegismesh.core.service.RadioState
 
-/**
- * Displays the current radio status text.
- */
+// technical status indicator in the corner
 @Composable
 fun MeshGuardian(
     radioState: RadioState,
@@ -31,7 +29,6 @@ fun MeshGuardian(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.padding(8.dp)
     ) {
-        // Logo removed per user request. Only status text remains for feedback.
         Text(
             text = statusText,
             color = statusColor,

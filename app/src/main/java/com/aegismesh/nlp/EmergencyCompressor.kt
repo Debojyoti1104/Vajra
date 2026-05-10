@@ -4,10 +4,7 @@ import android.content.Context
 import org.json.JSONObject
 import java.io.InputStream
 
-/**
- * A lightweight utility to map human-readable emergency strings to compact 1-byte codes
- * using a predefined dictionary (intents.json). This minimizes packet size for BLE Mesh.
- */
+// Maps emergency strings to 1-byte codes using intents.json
 class EmergencyCompressor(private val context: Context) {
 
     private val intentMap: Map<Byte, String> by lazy {
@@ -28,35 +25,26 @@ class EmergencyCompressor(private val context: Context) {
             val intents = jsonObject.getJSONObject("intents")
             
             intents.keys().forEach { key ->
-                // Keys are in "0x00" format
+                // keys are hex: "0x0A" -> byte
                 val code = key.substring(2).toInt(16).toByte()
                 map[code] = intents.getString(key)
             }
         } catch (e: Exception) {
-
             e.printStackTrace()
         }
         return map
     }
 
-    /**
-     * Returns a list of all available human-readable emergency descriptions.
-     */
     fun getAvailableIntents(): List<String> {
         return intentMap.values.toList().sorted()
     }
 
-    /**
-     * Compresses a descriptive string into a single byte.
-     * Returns 0x00 (Unknown) if no match is found.
-     */
+    // string to byte
     fun compressIntent(intent: String): Byte {
         return intentMap.entries.find { it.value.equals(intent, ignoreCase = true) }?.key ?: 0x00
     }
 
-    /**
-     * Decompresses a 1-byte code back into its descriptive string.
-     */
+    // byte back to string
     fun decompressIntent(intentCode: Byte): String {
         return intentMap[intentCode] ?: "Unknown Emergency"
     }

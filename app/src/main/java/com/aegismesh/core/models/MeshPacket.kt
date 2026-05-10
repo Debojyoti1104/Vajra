@@ -2,32 +2,20 @@ package com.aegismesh.core.models
 
 import java.nio.ByteBuffer
 
-/**
- * Represents a single 31-byte BLE Connectionless Mesh Packet.
- *
- * BLE Advertisement Payload Limit: 31 bytes.
- * We structure it as follows:
- * - MessageID (4 bytes): Unique identifier to prevent broadcast storms.
- * - HopCount/TTL (1 byte): Time-To-Live, decremented at each hop.
- * - Latitude (4 bytes): Compressed integer representation of GPS lat.
- * - Longitude (4 bytes): Compressed integer representation of GPS lon.
- * - IntentCode (1 byte): Maps to a predefined emergency string (e.g., 0x0A = "Trapped").
- * - Signature (4-16 bytes): Optional lightweight HMAC or parity check to prevent spoofing.
- */
+// Mesh packet structure (fits in 31-byte BLE limit)
+// MessageID (4), TTL (1), Lat (4), Lon (4), Intent (1), Sig (4) = 18 bytes
 data class MeshPacket(
     val messageId: Int,
     var hopCount: Byte,
     val compressedLat: Int,
     val compressedLon: Int,
     val intentCode: Byte,
-    val signature: ByteArray = ByteArray(4) { 0 } // Basic 4-byte signature placeholder
+    val signature: ByteArray = ByteArray(4) { 0 }
 ) {
     val latitude: Double get() = compressedLat / 10_000_000.0
     val longitude: Double get() = compressedLon / 10_000_000.0
 
-    /**
-     * Serializes the packet into a ByteArray suitable for BLE advertising.
-     */
+    // serialize to byte array for advertising
     fun toByteArray(): ByteArray {
         val buffer = ByteBuffer.allocate(PACKET_SIZE)
         buffer.putInt(messageId)
@@ -40,12 +28,10 @@ data class MeshPacket(
     }
 
     companion object {
-        const val PACKET_SIZE = 18 // 4 + 1 + 4 + 4 + 1 + 4
-        const val DEFAULT_TTL: Byte = 5 // Max 5 hops to prevent endless storms
+        const val PACKET_SIZE = 18
+        const val DEFAULT_TTL: Byte = 5
 
-        /**
-         * Deserializes a ByteArray back into a MeshPacket.
-         */
+        // parse byte array back into packet object
         fun fromByteArray(bytes: ByteArray): MeshPacket? {
             if (bytes.size < PACKET_SIZE) return null
 

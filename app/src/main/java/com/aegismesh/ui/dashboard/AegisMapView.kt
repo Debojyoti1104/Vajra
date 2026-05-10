@@ -1,7 +1,6 @@
 package com.aegismesh.ui.dashboard
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -13,7 +12,7 @@ import com.google.maps.android.compose.*
 @Composable
 fun AegisMapView(
     packet: MeshPacket,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     // Senders location from mesh packet
     val senderPos = LatLng(packet.latitude, packet.longitude)
@@ -31,7 +30,7 @@ fun AegisMapView(
         cameraPositionState = cameraPositionState,
         uiSettings = MapUiSettings(
             zoomControlsEnabled = true,
-            myLocationButtonEnabled = true
+            myLocationButtonEnabled = true,
         )
     ) {
         // mark the victim
