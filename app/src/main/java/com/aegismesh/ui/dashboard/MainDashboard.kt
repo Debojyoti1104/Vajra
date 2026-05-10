@@ -1,5 +1,7 @@
 package com.aegismesh.ui.dashboard
 
+import android.location.Location
+import java.util.Locale
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -20,6 +22,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import com.aegismesh.R
 import com.aegismesh.core.models.MeshPacket
@@ -29,30 +32,33 @@ import com.aegismesh.ui.components.MeshGuardian
 @Composable
 fun MainDashboard(
     radioState: RadioState,
-    incomingPackets: List<Pair<MeshPacket, String>>, // Packet and Decompressed Intent
+    incomingPackets: List<Pair<MeshPacket, String>>,
     availableIntents: List<String>,
     selectedPacket: MeshPacket?,
+    userLocation: Pair<Double, Double>,
     beepEnabled: Boolean,
     onBeepToggle: (Boolean) -> Unit,
     onPacketSelected: (MeshPacket?) -> Unit,
-    onHoldSos: (String) -> Unit
+    onHoldSos: (android.content.Context, String) -> Unit
 ) {
+    val context = LocalContext.current
     var selectedIntent by remember { mutableStateOf("I'm trapped and bleeding") }
     var showDropdown by remember { mutableStateOf(false) }
 
-    // Dark Mode Protocol: Pure Black Background
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
             .padding(16.dp)
     ) {
-        // If a packet is selected, show the map overlay
+        // Map overlay when tracking
         if (selectedPacket != null) {
             Box(modifier = Modifier.fillMaxSize()) {
-                AegisMapView(packet = selectedPacket)
+                AegisMapView(
+                    packet = selectedPacket,
+                    userLocation = userLocation
+                )
                 
-                // Overlay Controls
                 Column(modifier = Modifier.padding(16.dp).align(Alignment.TopStart)) {
                     Button(onClick = { onPacketSelected(null) }) {
                         Text("BACK TO FEED")
@@ -71,7 +77,6 @@ fun MainDashboard(
             return@Column
         }
 
-        // Header with Mesh Guardian
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -89,7 +94,7 @@ fun MainDashboard(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Central Reactive Element: Pulse Animation
+        // Signal pulse UI
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -101,7 +106,7 @@ fun MainDashboard(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Intent Selector
+        // Pick emergency type
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -138,11 +143,10 @@ fun MainDashboard(
         Spacer(modifier = Modifier.height(16.dp))
 
         // SOS Button
-        SosButton(onHoldSos = { onHoldSos(selectedIntent) })
+        SosButton(onHoldSos = { onHoldSos(context, selectedIntent) })
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Live Feed Header
         Text(
             text = "LIVE INTERCEPTS",
             color = Color.Gray,
@@ -153,7 +157,6 @@ fun MainDashboard(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Scrolling Live Feed
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -162,6 +165,7 @@ fun MainDashboard(
                 InterceptCard(
                     packet = packet, 
                     intentText = text,
+                    userLocation = userLocation,
                     onClick = { onPacketSelected(packet) }
                 )
             }
@@ -184,17 +188,14 @@ fun PulseAnimation(isActive: Boolean) {
     Canvas(modifier = Modifier.size(200.dp)) {
         val radius = size.minDimension / 2
         if (isActive) {
-            // Inner Core
             drawCircle(
                 color = Color.Cyan.copy(alpha = 0.5f),
                 radius = radius * 0.2f
             )
-            // Expanding Radar Ring
             drawCircle(
                 color = Color.Cyan.copy(alpha = 1f - pulseRatio),
                 radius = radius * pulseRatio
             )
-            // Secondary Ring
             val secondaryRatio = (pulseRatio + 0.5f) % 1f
             drawCircle(
                 color = Color.Cyan.copy(alpha = 1f - secondaryRatio),
@@ -252,16 +253,29 @@ fun SosButton(onHoldSos: () -> Unit) {
 fun InterceptCard(
     packet: MeshPacket,
     intentText: String,
+    userLocation: Pair<Double, Double>,
     onClick: () -> Unit
 ) {
-    // Estimating distance purely for UI demo, in reality driven by RSSI
-    val mockDistance = "${(packet.hopCount * 15) + (Math.random() * 10).toInt()}m"
+    // Calculate real distance using Android Location API
+    val realDistance = if (userLocation.first != 0.0) {
+        val results = FloatArray(1)
+        Location.distanceBetween(
+            userLocation.first, userLocation.second,
+            packet.latitude, packet.longitude,
+            results
+        )
+        val distance = results[0]
+        if (distance > 1000) "${String.format(Locale.US, "%.1f", distance / 1000)}km"
+        else "${distance.toInt()}m"
+    } else {
+        "Locating..."
+    }
     
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF111111)) // Slightly elevated from pure black
+            .background(Color(0xFF111111))
             .pointerInput(Unit) {
                 detectTapGestures(onTap = { onClick() })
             }
@@ -278,7 +292,7 @@ fun InterceptCard(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "ID: ${packet.messageId.toUInt().toString(16).uppercase()} • Hops Left: ${packet.hopCount}",
+                text = "ID: ${packet.messageId.toUInt().toString(16).uppercase()} • Hops: ${packet.hopCount}",
                 color = Color.Gray,
                 fontSize = 12.sp
             )
@@ -286,7 +300,7 @@ fun InterceptCard(
         
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = mockDistance,
+                text = realDistance,
                 color = Color.Cyan,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp
