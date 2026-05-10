@@ -67,8 +67,8 @@ class MainActivity : ComponentActivity() {
                     beepEnabled = beepEnabled,
                     onBeepToggle = { viewModel.toggleBeep(it) },
                     onPacketSelected = { viewModel.selectPacket(it) },
-                    onHoldSos = { intent ->
-                        viewModel.triggerSos(intent)
+                    onHoldSos = { ctx, intent ->
+                        viewModel.triggerSos(ctx, intent)
                     }
                 )
             }
